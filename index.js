@@ -7,7 +7,7 @@ const config = require('./config.json');
 const { scheduleJob } = require('node-schedule');
 const { escapeHtml } = require('./utils/helpers.js');
 
-const bot = new Telegraf('BOT_TOKEN');
+const bot = new Telegraf('TOKEN_BOT');
 
 const sessions = new LocalSession({ database: 'session_db.json' });
 bot.use(sessions.middleware());
@@ -22,9 +22,6 @@ fs.readdirSync(path.join(__dirname, 'commands')).forEach(file => {
     });
 });
 
-
-
-// "Клавиатура"
 bot.hears('👨‍💻 Связаться с мастером', async (ctx) => {
     await ctx.replyWithHTML(
         `💈 <b>${escapeHtml(config.botName || "Контакты мастера: ")}</b>\n\n` +
@@ -38,7 +35,36 @@ bot.hears('👨‍💻 Связаться с мастером', async (ctx) => {
     );
 });
 
-// /allbookings
+bot.action(/barber_cancel_(.+)/, async (ctx) => {
+    try {
+        const bookingId = ctx.match[1];
+
+        if (!config.barbers.includes(ctx.from.id)) {
+            return await ctx.answerCbQuery('🚫 Нет прав');
+        }
+        const numRemoved = await new Promise((resolve, reject) => {
+            bookings.remove(
+                { _id: bookingId },
+                {},
+                (err, numRemoved) => err ? reject(err) : resolve(numRemoved)
+            )
+        });
+
+        if (numRemoved === 0) {
+            return await ctx.answerCbQuery('⚠️ Запись не найдена');
+        }
+        await new Promise(resolve => bookings.loadDatabase(resolve));
+
+        await ctx.answerCbQuery('✅ Запись удалена');
+        await require('./commands/barber_bookings.js').execute(ctx, bot);
+
+    } catch (err) {
+        console.error('Ошибка удаления:', err);
+        await ctx.answerCbQuery('⚠️ Ошибка удаления');
+    }
+});
+
+
 bot.action('bookings_prev', async (ctx) => {
     ctx.session.bookingPage = Math.max(1, (ctx.session.bookingPage || 1) - 1);
     await require('./commands/barber_bookings.js').execute(ctx, bot);
